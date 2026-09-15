@@ -1,9 +1,1 @@
-{
-  "name": "Cảnh báo mất điện",
-  "short_name": "Cảnh báo điện",
-  "start_url": "./",
-  "display": "standalone",
-  "background_color": "#f3f4f6",
-  "theme_color": "#111827",
-  "lang": "vi"
-}
+{"name": "PowerGuard", "short_name": "PowerGuard", "start_url": "./", "display": "standalone", "theme_color": "#0f172a", "background_color": "#f1f5f9", "lang": "vi"}

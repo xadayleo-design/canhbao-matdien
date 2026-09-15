@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<link rel="manifest" href="manifest.json">
+<title>Cảnh báo mất điện</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#f3f4f6;color:#111827}
+.wrap{max-width:520px;margin:auto;padding:18px}.card{background:#fff;border-radius:18px;padding:18px;margin-bottom:14px;box-shadow:0 4px 18px #0001}
+h1{font-size:24px;margin:4px 0 16px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{padding:14px;border-radius:14px;background:#f9fafb}.k{font-size:12px;color:#6b7280}.v{font-size:18px;font-weight:800;margin-top:4px}
+.ok{color:#047857}.bad{color:#b91c1c}.warn{color:#b45309}.btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button{border:0;border-radius:14px;padding:15px;font-size:16px;font-weight:750;background:#111827;color:white}
+button.secondary{background:#e5e7eb;color:#111827}button.danger{background:#b91c1c}button.good{background:#047857}
+input{width:100%;padding:12px;border:1px solid #d1d5db;border-radius:11px;margin:5px 0 10px;font-size:15px}
+label{font-size:13px;color:#4b5563}.small{font-size:12px;color:#6b7280;line-height:1.5}.row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+#log{font:12px ui-monospace,monospace;white-space:pre-wrap;max-height:130px;overflow:auto;background:#111827;color:#e5e7eb;padding:10px;border-radius:10px}
+</style>
+</head>
+<body><div class="wrap">
+<h1>⚡ Cảnh báo mất điện</h1>
+<div class="card">
+ <div class="grid">
+  <div class="stat"><div class="k">KẾT NỐI</div><div id="online" class="v warn">CHƯA KẾT NỐI</div></div>
+  <div class="stat"><div class="k">NGUỒN ĐIỆN</div><div id="power" class="v">--</div></div>
+  <div class="stat"><div class="k">CẢNH BÁO</div><div id="alarm" class="v">--</div></div>
+  <div class="stat"><div class="k">ĐƯỜNG MẠNG</div><div id="network" class="v">--</div></div>
+  <div class="stat"><div class="k">CÒI</div><div id="siren" class="v">--</div></div>
+  <div class="stat"><div class="k">CẬP NHẬT</div><div id="updated" class="v" style="font-size:14px">--</div></div>
+ </div>
+</div>
+
+<div class="card">
+ <div class="btns">
+  <button class="danger" onclick="cmd('STOP')">TẠM DỪNG</button>
+  <button class="good" onclick="cmd('START')">TIẾP TỤC</button>
+  <button onclick="cmd('SIREN_ON')">BẬT CÒI</button>
+  <button class="secondary" onclick="cmd('SIREN_OFF')">TẮT CÒI</button>
+ </div>
+ <button style="width:100%;margin-top:10px" class="secondary" onclick="cmd('STATUS')">CẬP NHẬT TRẠNG THÁI</button>
+</div>
+
+<div class="card">
+ <div class="row"><b>Cấu hình HiveMQ</b><button class="secondary" style="padding:8px 12px" onclick="toggleCfg()">Ẩn/Hiện</button></div>
+ <div id="cfg" style="margin-top:12px">
+  <label>Host</label><input id="host" value="54c1a041d2854c8abe7908bc5c5d4cb9.s1.eu.hivemq.cloud">
+  <label>WSS Port</label><input id="port" value="8884" inputmode="numeric">
+  <label>Username app</label><input id="user" placeholder="ví dụ: canhbao_app">
+  <label>Password app</label><input id="pass" type="password" placeholder="Mật khẩu credential riêng cho app">
+  <label>Device ID</label><input id="device" value="canhbao01">
+  <button style="width:100%" onclick="saveConnect()">LƯU & KẾT NỐI</button>
+  <p class="small">Nên dùng credential riêng cho app, không dùng chung mật khẩu của thiết bị. Cấu hình được lưu trên chính trình duyệt này.</p>
+ </div>
+</div>
+<div class="card"><b>Nhật ký</b><div id="log">Sẵn sàng.</div></div>
+</div>
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<script>
+let client=null,lastState=0;
+const $=id=>document.getElementById(id);
+function log(x){$('log').textContent=new Date().toLocaleTimeString()+'  '+x+'\n'+$('log').textContent.slice(0,1800)}
+function topic(x){return `canhbao/${$('device').value.trim()}/${x}`}
+function setOnline(ok){$('online').textContent=ok?'ONLINE':'OFFLINE';$('online').className='v '+(ok?'ok':'bad')}
+function render(s){
+ lastState=Date.now();
+ $('power').textContent=s.power==='MAT_DIEN'?'MẤT ĐIỆN':s.power==='CO_DIEN'?'CÓ ĐIỆN':(s.power||'--');
+ $('power').className='v '+(s.power==='MAT_DIEN'?'bad':s.power==='CO_DIEN'?'ok':'');
+ $('alarm').textContent=s.paused?'TẠM DỪNG':s.alarm==='ON'?'ĐANG CẢNH BÁO':'BÌNH THƯỜNG';
+ $('alarm').className='v '+(s.paused?'warn':s.alarm==='ON'?'bad':'ok');
+ $('siren').textContent=s.siren===true?'ĐANG KÊU':s.siren===false?'TẮT':'--';
+ $('siren').className='v '+(s.siren===true?'bad':'ok');
+ $('network').textContent=s.network||'--';
+ $('updated').textContent=new Date().toLocaleTimeString();
+}
+function connect(){
+ if(client){try{client.end(true)}catch(e){}}
+ const host=$('host').value.trim(),port=$('port').value.trim(),user=$('user').value.trim(),pass=$('pass').value;
+ if(!host||!port||!user||!pass){log('Thiếu cấu hình HiveMQ');return}
+ const url=`wss://${host}:${port}/mqtt`;
+ log('Đang kết nối HiveMQ...');
+ client=mqtt.connect(url,{username:user,password:pass,clean:true,connectTimeout:10000,reconnectPeriod:5000,clientId:'PWA_'+Math.random().toString(16).slice(2,10)});
+ client.on('connect',()=>{setOnline(true);log('MQTT ONLINE');client.subscribe(topic('#'),{qos:1});setTimeout(()=>cmd('STATUS'),500)});
+ client.on('reconnect',()=>{setOnline(false);log('Đang kết nối lại...')});
+ client.on('close',()=>setOnline(false));
+ client.on('error',e=>{setOnline(false);log('MQTT lỗi: '+e.message)});
+ client.on('message',(t,b)=>{
+   let m=b.toString(); log(t.split('/').pop()+': '+m);
+   if(t===topic('state')){try{render(JSON.parse(m))}catch(e){}}
+ });
+}
+function cmd(c){
+ if(!client||!client.connected){log('Chưa kết nối MQTT');return}
+ client.publish(topic('cmd'),c,{qos:1},e=>log(e?'Gửi lỗi: '+e.message:'Đã gửi '+c));
+}
+function saveConnect(){
+ ['host','port','user','pass','device'].forEach(k=>localStorage.setItem('cb_'+k,$(k).value));
+ connect();
+}
+function toggleCfg(){$('cfg').style.display=$('cfg').style.display==='none'?'block':'none'}
+['host','port','user','pass','device'].forEach(k=>{let v=localStorage.getItem('cb_'+k);if(v!==null)$(k).value=v});
+if(localStorage.getItem('cb_user')&&localStorage.getItem('cb_pass')) connect();
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script></body></html>
